@@ -32,13 +32,16 @@
 <div id="results"></div>
 
 <script>
+  // Replace with a valid access token
+  const accessToken = "YOUR_ACCESS_TOKEN";
+
   // 1) Fetch the list of agents and populate dropdown
   async function getAgents() {
     try {
       const response = await fetch("https://api.mypurecloud.com/api/v2/users?limit=100", {
         method: "GET",
         headers: {
-          "Authorization": "Bearer YOUR_ACCESS_TOKEN",  // Replace with valid token
+          "Authorization": `Bearer ${accessToken}`,  // Use the actual token here
           "Content-Type": "application/json"
         }
       });
@@ -49,7 +52,6 @@
 
       const data = await response.json();
 
-      // data.entities typically contains the list of users in Genesys Cloud
       return data.entities;
     } catch (error) {
       console.error(error);
@@ -64,18 +66,16 @@
       const response = await fetch(`https://api.mypurecloud.com/api/v2/workforcemanagement/agents/${agentId}/managementunit`, {
         method: "GET",
         headers: {
-          "Authorization": "Bearer YOUR_ACCESS_TOKEN",  // Replace with valid token
+          "Authorization": `Bearer ${accessToken}`,  // Use the actual token here
           "Content-Type": "application/json"
         }
       });
 
       if (!response.ok) {
-        // The user might not have an assigned MU, handle the error or check the status
         throw new Error(`Error fetching agent's MU: HTTP ${response.status}`);
       }
 
       const data = await response.json();
-      // data should contain { managementUnit: { id: 'xxxxx' } } or a similar structure
       return data.managementUnit && data.managementUnit.id ? data.managementUnit.id : null;
     } catch (error) {
       console.error(error);
@@ -85,18 +85,12 @@
   }
 
   // 3) Fetch the Management Unit name by ID
-  //    Option A: fetch ALL management units, filter for the ID
-  //    Option B: directly call /managementunits/{muId} if you prefer to fetch a single MU
   async function getManagementUnitNameById(managementUnitId) {
     try {
-      // Example: get a single Management Unit
-      // const response = await fetch(`https://api.mypurecloud.com/api/v2/workforcemanagement/managementunits/${managementUnitId}`, { ... });
-      
-      // Or, fetch list of all management units & find the one that matches
       const response = await fetch(`https://api.mypurecloud.com/api/v2/workforcemanagement/managementunits?expand=businessUnit`, {
         method: "GET",
         headers: {
-          "Authorization": "Bearer YOUR_ACCESS_TOKEN", // Replace with valid token
+          "Authorization": `Bearer ${accessToken}`, // Use the actual token here
           "Content-Type": "application/json"
         }
       });
@@ -106,7 +100,6 @@
       }
 
       const data = await response.json();
-      // data.entities should contain an array of management units
       const managementUnits = data.entities || [];
       
       const mu = managementUnits.find(mu => mu.id === managementUnitId);
@@ -126,11 +119,9 @@
 
     // Get the agents
     const agents = await getAgents();
-    // Clear the select
     agentsSelect.innerHTML = "";
 
     if (agents && agents.length > 0) {
-      // Populate the dropdown with user ID as value, user name as label
       agents.forEach(agent => {
         const option = document.createElement("option");
         option.value = agent.id;
@@ -144,7 +135,6 @@
       agentsSelect.appendChild(option);
     }
 
-    // On button click, get the MU for the selected user
     submitBtn.addEventListener("click", async () => {
       resultsDiv.textContent = "Retrieving Management Unit...";
       const selectedAgentId = agentsSelect.value;
