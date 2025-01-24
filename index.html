@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Genesys Cloud - Management Unit Lookup (Manual Implicit Grant)</title>
+  <title>Genesys Cloud - MU Lookup with Search</title>
   <style>
     body {
       font-family: Arial, sans-serif;
       margin: 20px;
     }
-    label, select, button {
+    label, select, input, button {
       display: block;
       margin: 10px 0;
     }
@@ -22,6 +22,11 @@
 
 <h1>Genesys Cloud Management Unit Lookup</h1>
 
+<!-- A textbox to filter users -->
+<label for="searchUser">Search users:</label>
+<input type="text" id="searchUser" placeholder="Type to filter users...">
+
+<!-- The dropdown of filtered results -->
 <label for="agentSelect">Select an Agent:</label>
 <select id="agentSelect"></select>
 
@@ -30,155 +35,199 @@
 <div id="results"></div>
 
 <script>
-  /**********************************************************
-   * 1) CONFIGURE YOUR OAUTH CLIENT INFO + URLS
-   **********************************************************/
-  const clientId     = "5f8da5c2-f8ef-4168-a321-f06e16f558f3"; // From Genesys Cloud OAuth
-  const redirectUri  = "https://gmcglynn88.github.io/Management-Unit-Search/"; // Must match OAuth config exactly
-  const responseType = "token";
-  const region       = "mypurecloud.ie"; // For Ireland (Dublin)
-  const oauthUrl     = `https://login.${region}/oauth/authorize?client_id=${clientId}&response_type=${responseType}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+  /**************************************************************************
+   * 1. CONFIG: Put your Genesys Cloud OAuth details and region here
+   **************************************************************************/
+  const clientId      = "YOUR_CLIENT_ID";
+  const redirectUri   = "YOUR_REDIRECT_URI";  // Must match exactly in OAuth config
+  const responseType  = "token";
+  const region        = "mypurecloud.ie"; // e.g., "mypurecloud.ie" for Ireland (Dublin)
 
-  /**********************************************************
-   * 2) ON PAGE LOAD: PARSE TOKEN OR REDIRECT
-   **********************************************************/
-  document.addEventListener("DOMContentLoaded", () => {
+  // Construct the OAuth URL for Implicit Grant
+  const oauthUrl = `https://login.${region}/oauth/authorize`
+                 + `?client_id=${clientId}`
+                 + `&response_type=${responseType}`
+                 + `&redirect_uri=${encodeURIComponent(redirectUri)}`;
+
+  // We'll store the token and allUsers globally
+  let accessToken = null;
+  let allUsers = [];  // This will hold the full user list for searching
+
+  /**************************************************************************
+   * 2. ON PAGE LOAD: Check if we have a token in the URL hash; if not, redirect
+   **************************************************************************/
+  document.addEventListener("DOMContentLoaded", async () => {
     const token = extractTokenFromUrl();
     if (!token) {
-      // If no access_token, redirect to Genesys Cloud login
+      // No token? Redirect to Genesys Cloud login
       window.location.href = oauthUrl;
     } else {
-      // We have a token in the URL hash
-      initializeApp(token);
+      // We have a token
+      accessToken = token;
+      // Load all users, then set up search
+      await loadAllUsers();
+      initSearchAndDropdown();
+      // Handle button click
+      document.getElementById("lookupBtn").addEventListener("click", onGetManagementUnitClick);
     }
   });
 
-  // Extract the #access_token from the URL hash
+  // Extract the access token from the location hash (#access_token=...)
   function extractTokenFromUrl() {
-    // Example URL after login:
-    //  https://myapp.com/index.html#access_token=ABC123&token_type=bearer&expires_in=86399&state=...
-    const hash = window.location.hash.substring(1);   // remove '#'
+    const hash = window.location.hash.substring(1); // remove '#'
     const params = new URLSearchParams(hash);
     return params.get("access_token");
   }
 
-  /**********************************************************
-   * 3) INITIALIZE THE APP WITH THE TOKEN
-   **********************************************************/
-  function initializeApp(token) {
-    // Once we have a token, load the list of agents
-    loadAgents(token);
-
-    // Wire up the "Get Management Unit" button
-    const lookupBtn = document.getElementById("lookupBtn");
-    lookupBtn.addEventListener("click", async () => {
-      const selectedAgentId = document.getElementById("agentSelect").value;
-      if (!selectedAgentId) {
-        alert("No agent selected.");
-        return;
-      }
-
-      const resultsDiv = document.getElementById("results");
-      resultsDiv.textContent = "Looking up Management Unit...";
-
-      try {
-        const muId = await getAgentManagementUnitId(token, selectedAgentId);
-        if (!muId) {
-          resultsDiv.textContent = "No Management Unit assigned for this user.";
-          return;
-        }
-
-        const muName = await getManagementUnitName(token, muId);
-        resultsDiv.textContent = `Management Unit: ${muName}`;
-      } catch (err) {
-        console.error("MU lookup error:", err);
-        resultsDiv.textContent = "Error: " + err.message;
-      }
-    });
-  }
-
-  /**********************************************************
-   * 4) GET AGENTS
-   **********************************************************/
-  async function loadAgents(token) {
-    const agentSelect = document.getElementById("agentSelect");
-    agentSelect.innerHTML = "<option>Loading agents...</option>";
-
+  /**************************************************************************
+   * 3. LOAD ALL USERS (Paged) AND STORE IN `allUsers`
+   **************************************************************************/
+  async function loadAllUsers() {
     try {
-      // Basic fetch to the Genesys Cloud /users endpoint
-      const resp = await fetch(`https://api.${region}/api/v2/users?limit=100`, {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json"
+      let pageNumber = 1;
+      let morePages = true;
+      allUsers = [];  // clear global array
+
+      while (morePages) {
+        const url = `https://api.${region}/api/v2/users?pageNumber=${pageNumber}&pageSize=100`;
+        const resp = await fetch(url, {
+          headers: {
+            "Authorization": `Bearer ${accessToken}`,
+            "Content-Type": "application/json"
+          }
+        });
+        if (!resp.ok) {
+          throw new Error(`Failed to fetch users (page ${pageNumber}): ${resp.status}`);
         }
-      });
-      if (!resp.ok) {
-        throw new Error(`Failed to fetch users: ${resp.status}`);
-      }
+        const data = await resp.json();
+        if (data.entities) {
+          allUsers = allUsers.concat(data.entities);
+        }
 
-      const data = await resp.json();
-      const users = data.entities || [];
-      agentSelect.innerHTML = "";
-
-      if (users.length === 0) {
-        const opt = document.createElement("option");
-        opt.value = "";
-        opt.text = "No agents found.";
-        agentSelect.add(opt);
-        return;
+        // If there's another page, increment; else stop
+        if (pageNumber < data.pageCount) {
+          pageNumber++;
+        } else {
+          morePages = false;
+        }
       }
-
-      for (const user of users) {
-        const opt = document.createElement("option");
-        opt.value = user.id;
-        opt.text = user.name || user.username || user.id;
-        agentSelect.add(opt);
-      }
+      console.log(`Loaded ${allUsers.length} total users.`);
     } catch (err) {
-      console.error("Error loading agents:", err);
-      agentSelect.innerHTML = "<option>Error loading agents</option>";
+      console.error("Error loading all users:", err);
+      document.getElementById("results").textContent = `Error: ${err.message}`;
     }
   }
 
-  /**********************************************************
-   * 5) GET A USER'S MANAGEMENT UNIT ID
-   **********************************************************/
-  async function getAgentManagementUnitId(token, userId) {
-    const resp = await fetch(`https://api.${region}/api/v2/workforcemanagement/agents/${userId}/managementunit`, {
+  /**************************************************************************
+   * 4. SET UP THE SEARCH TEXTBOX & POPULATE INITIAL DROPDOWN
+   **************************************************************************/
+  function initSearchAndDropdown() {
+    // Listen for user typing in #searchUser
+    const searchBox = document.getElementById("searchUser");
+    searchBox.addEventListener("input", () => {
+      filterAndPopulateUsers(searchBox.value);
+    });
+
+    // Populate the select for the first time (no filter)
+    filterAndPopulateUsers("");
+  }
+
+  // Filter allUsers by the searchTerm, then populate the <select>
+  function filterAndPopulateUsers(searchTerm) {
+    const agentSelect = document.getElementById("agentSelect");
+    agentSelect.innerHTML = "";
+
+    // Basic case-insensitive match on user name or username
+    const lowerSearch = searchTerm.toLowerCase();
+    const filtered = allUsers.filter(u => {
+      const nameMatch = (u.name || "").toLowerCase().includes(lowerSearch);
+      const userNameMatch = (u.username || "").toLowerCase().includes(lowerSearch);
+      return nameMatch || userNameMatch;
+    });
+
+    if (filtered.length === 0) {
+      // No matches?
+      const opt = document.createElement("option");
+      opt.value = "";
+      opt.text = "No users found";
+      agentSelect.add(opt);
+      return;
+    }
+
+    // Populate the dropdown with the filtered list
+    filtered.forEach(u => {
+      const opt = document.createElement("option");
+      opt.value = u.id;
+      opt.text = u.name || u.username || u.id;
+      agentSelect.add(opt);
+    });
+  }
+
+  /**************************************************************************
+   * 5. MANAGEMENT UNIT LOOKUP LOGIC
+   **************************************************************************/
+  async function onGetManagementUnitClick() {
+    const agentSelect = document.getElementById("agentSelect");
+    const selectedAgentId = agentSelect.value;
+    const resultsDiv = document.getElementById("results");
+
+    if (!selectedAgentId) {
+      resultsDiv.textContent = "Please select an agent.";
+      return;
+    }
+
+    resultsDiv.textContent = "Looking up Management Unit...";
+
+    try {
+      const muId = await getAgentManagementUnitId(selectedAgentId);
+      if (!muId) {
+        resultsDiv.textContent = "No Management Unit found for this user.";
+        return;
+      }
+      const muName = await getManagementUnitName(muId);
+      resultsDiv.textContent = `Management Unit: ${muName}`;
+    } catch (err) {
+      console.error("MU lookup error:", err);
+      resultsDiv.textContent = "Error: " + err.message;
+    }
+  }
+
+  // Fetch the agent's managementUnit ID
+  async function getAgentManagementUnitId(userId) {
+    const url = `https://api.${region}/api/v2/workforcemanagement/agents/${userId}/managementunit`;
+    const resp = await fetch(url, {
       headers: {
-        "Authorization": `Bearer ${token}`,
+        "Authorization": `Bearer ${accessToken}`,
         "Content-Type": "application/json"
       }
     });
     if (!resp.ok) {
-      throw new Error(`MU ID request failed: HTTP ${resp.status}`);
+      throw new Error(`MU ID fetch failed: HTTP ${resp.status}`);
     }
     const data = await resp.json();
-    // Typically data: { managementUnit: { id: "12345" } }
     return data.managementUnit?.id || null;
   }
 
-  /**********************************************************
-   * 6) GET MANAGEMENT UNIT NAME FROM ID
-   **********************************************************/
-  async function getManagementUnitName(token, muId) {
-    // We'll fetch all MUs, then find the one matching muId
-    // For large orgs, you may prefer calling GET /managementunits/{muId} directly
-    const resp = await fetch(`https://api.${region}/api/v2/workforcemanagement/managementunits?expand=businessUnit`, {
+  // Fetch all MUs, find the one matching muId, return its name
+  async function getManagementUnitName(muId) {
+    const url = `https://api.${region}/api/v2/workforcemanagement/managementunits?expand=businessUnit`;
+    const resp = await fetch(url, {
       headers: {
-        "Authorization": `Bearer ${token}`,
+        "Authorization": `Bearer ${accessToken}`,
         "Content-Type": "application/json"
       }
     });
     if (!resp.ok) {
-      throw new Error(`ManagementUnits request failed: HTTP ${resp.status}`);
+      throw new Error(`ManagementUnits fetch failed: HTTP ${resp.status}`);
     }
     const data = await resp.json();
     const muArray = data.entities || [];
-    const mu = muArray.find(item => item.id === muId);
-    return mu ? mu.name : "(Not Found)";
+    const muObj = muArray.find(mu => mu.id === muId);
+    if (!muObj) {
+      return "No Management Unit found";
+    }
+    return muObj.name || "Unnamed Management Unit";
   }
 </script>
-
 </body>
 </html>
