@@ -41,12 +41,12 @@
   // We'll store our Genesys Cloud API token here once we're logged in
   let accessToken = null;
 
-  // Set your Genesys Cloud region here
-  const GENESYS_CLOUD_ENV = "mypurecloud.ie"; // Ireland
+  // Set your Genesys Cloud region here (Ireland)
+  const GENESYS_CLOUD_ENV = "mypurecloud.ie";
 
-  // Replace these with your real client ID and the redirect URI you configured in Genesys Cloud OAuth
-  const CLIENT_ID = "YOUR_CLIENT_ID";
-  const REDIRECT_URI = "YOUR_REDIRECT_URI"; // Must match exactly in your OAuth client config
+  // Replace these with your Genesys Cloud OAuth Client details:
+  const CLIENT_ID = "5f8da5c2-f8ef-4168-a321-f06e16f558f3";
+  const REDIRECT_URI = "https://gmcglynn88.github.io/Management-Unit-Search/";
 
   // The Genesys Cloud Platform Client instance
   const platformClient = window.platformClient;
@@ -59,8 +59,6 @@
       client.setEnvironment(GENESYS_CLOUD_ENV);
 
       // Initiate the Implicit Grant login
-      // This will redirect the browser if you are not already logged in,
-      // then come back to your redirect URI with an access_token.
       await client.loginImplicitGrant(CLIENT_ID, REDIRECT_URI);
 
       // Retrieve the token from the JS SDK
