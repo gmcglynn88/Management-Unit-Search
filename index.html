@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Genesys Cloud Management Unit Lookup</title>
+  <meta charset="UTF-8">
+  <title>Genesys Cloud - Management Unit Lookup (Manual Implicit Grant)</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -17,178 +17,168 @@
       font-weight: bold;
     }
   </style>
-
-  <!-- Load the Genesys Cloud JavaScript SDK -->
-  <!-- This must load BEFORE you reference `window.platformClient` -->
-  <script src="https://sdk-cdn.mypurecloud.com/javascript-platform-client-latest.min.js"></script>
 </head>
 <body>
 
 <h1>Genesys Cloud Management Unit Lookup</h1>
-<div id="loginStatus">Logging in...</div>
 
-<label for="agentsSelect">Select an Agent:</label>
-<select id="agentsSelect" disabled></select>
+<label for="agentSelect">Select an Agent:</label>
+<select id="agentSelect"></select>
 
-<button id="submitBtn" disabled>Get Management Unit</button>
+<button id="lookupBtn">Get Management Unit</button>
 
 <div id="results"></div>
 
 <script>
-  // Set your Genesys Cloud region (e.g., Ireland)
-  const GENESYS_CLOUD_ENV = "mypurecloud.ie";
+  /**********************************************************
+   * 1) CONFIGURE YOUR OAUTH CLIENT INFO + URLS
+   **********************************************************/
+  const clientId     = "5f8da5c2-f8ef-4168-a321-f06e16f558f3"; // From Genesys Cloud OAuth
+  const redirectUri  = "https://gmcglynn88.github.io/Management-Unit-Search/"; // Must match OAuth config exactly
+  const responseType = "token";
+  const region       = "mypurecloud.ie"; // For Ireland (Dublin)
+  const oauthUrl     = `https://login.${region}/oauth/authorize?client_id=${clientId}&response_type=${responseType}&redirect_uri=${encodeURIComponent(redirectUri)}`;
 
-  // OAuth config from Genesys Cloud Admin > Integrations > OAuth
-  const CLIENT_ID = "YOUR_CLIENT_ID";
-  const REDIRECT_URI = "YOUR_REDIRECT_URI"; // Must match exactly in OAuth config
-
-  // Access token storage
-  let accessToken = null;
-
-  // The Genesys Cloud JS SDK
-  const platformClient = window.platformClient;
-  const client = platformClient.ApiClient.instance;
-
-  // 1) Initialize Genesys Cloud, do Implicit Grant login
-  async function initGenesysCloud() {
-    try {
-      client.setEnvironment(GENESYS_CLOUD_ENV);
-
-      // If user isn't logged in, they'll be prompted.
-      await client.loginImplicitGrant(CLIENT_ID, REDIRECT_URI);
-
-      // Grab the token from the SDK
-      accessToken = client.authData.accessToken;
-      console.log("Successfully logged in. Token:", accessToken);
-
-      document.getElementById("loginStatus").textContent = "Logged in!";
-      document.getElementById("agentsSelect").disabled = false;
-      document.getElementById("submitBtn").disabled = false;
-
-      // Now load the Agents list
-      loadAgentsIntoDropdown();
-
-    } catch (error) {
-      console.error("Error logging in:", error);
-      document.getElementById("loginStatus").textContent = "Login failed. Check console.";
+  /**********************************************************
+   * 2) ON PAGE LOAD: PARSE TOKEN OR REDIRECT
+   **********************************************************/
+  document.addEventListener("DOMContentLoaded", () => {
+    const token = extractTokenFromUrl();
+    if (!token) {
+      // If no access_token, redirect to Genesys Cloud login
+      window.location.href = oauthUrl;
+    } else {
+      // We have a token in the URL hash
+      initializeApp(token);
     }
+  });
+
+  // Extract the #access_token from the URL hash
+  function extractTokenFromUrl() {
+    // Example URL after login:
+    //  https://myapp.com/index.html#access_token=ABC123&token_type=bearer&expires_in=86399&state=...
+    const hash = window.location.hash.substring(1);   // remove '#'
+    const params = new URLSearchParams(hash);
+    return params.get("access_token");
   }
 
-  // 2) List agents (up to 100) and populate dropdown
-  async function loadAgentsIntoDropdown() {
-    const agentsSelect = document.getElementById("agentsSelect");
-    agentsSelect.innerHTML = "<option>Loading agents...</option>";
+  /**********************************************************
+   * 3) INITIALIZE THE APP WITH THE TOKEN
+   **********************************************************/
+  function initializeApp(token) {
+    // Once we have a token, load the list of agents
+    loadAgents(token);
+
+    // Wire up the "Get Management Unit" button
+    const lookupBtn = document.getElementById("lookupBtn");
+    lookupBtn.addEventListener("click", async () => {
+      const selectedAgentId = document.getElementById("agentSelect").value;
+      if (!selectedAgentId) {
+        alert("No agent selected.");
+        return;
+      }
+
+      const resultsDiv = document.getElementById("results");
+      resultsDiv.textContent = "Looking up Management Unit...";
+
+      try {
+        const muId = await getAgentManagementUnitId(token, selectedAgentId);
+        if (!muId) {
+          resultsDiv.textContent = "No Management Unit assigned for this user.";
+          return;
+        }
+
+        const muName = await getManagementUnitName(token, muId);
+        resultsDiv.textContent = `Management Unit: ${muName}`;
+      } catch (err) {
+        console.error("MU lookup error:", err);
+        resultsDiv.textContent = "Error: " + err.message;
+      }
+    });
+  }
+
+  /**********************************************************
+   * 4) GET AGENTS
+   **********************************************************/
+  async function loadAgents(token) {
+    const agentSelect = document.getElementById("agentSelect");
+    agentSelect.innerHTML = "<option>Loading agents...</option>";
 
     try {
-      const response = await fetch("https://api.mypurecloud.ie/api/v2/users?limit=100", {
+      // Basic fetch to the Genesys Cloud /users endpoint
+      const resp = await fetch(`https://api.${region}/api/v2/users?limit=100`, {
         headers: {
-          "Authorization": `Bearer ${accessToken}`,
+          "Authorization": `Bearer ${token}`,
           "Content-Type": "application/json"
         }
       });
-
-      if (!response.ok) {
-        throw new Error(`Error listing users: HTTP ${response.status}`);
+      if (!resp.ok) {
+        throw new Error(`Failed to fetch users: ${resp.status}`);
       }
-      const data = await response.json();
-      const agents = data.entities || [];
 
-      // Clear the dropdown
-      agentsSelect.innerHTML = "";
+      const data = await resp.json();
+      const users = data.entities || [];
+      agentSelect.innerHTML = "";
 
-      if (agents.length > 0) {
-        agents.forEach(agent => {
-          const opt = document.createElement("option");
-          opt.value = agent.id;
-          opt.text = agent.name || agent.username || agent.id;
-          agentsSelect.appendChild(opt);
-        });
-      } else {
+      if (users.length === 0) {
         const opt = document.createElement("option");
         opt.value = "";
-        opt.text = "No agents found";
-        agentsSelect.appendChild(opt);
+        opt.text = "No agents found.";
+        agentSelect.add(opt);
+        return;
+      }
+
+      for (const user of users) {
+        const opt = document.createElement("option");
+        opt.value = user.id;
+        opt.text = user.name || user.username || user.id;
+        agentSelect.add(opt);
       }
     } catch (err) {
-      console.error(err);
-      agentsSelect.innerHTML = "<option>Error loading agents</option>";
+      console.error("Error loading agents:", err);
+      agentSelect.innerHTML = "<option>Error loading agents</option>";
     }
   }
 
-  // 3) Fetch agent's Management Unit ID
-  async function getAgentManagementUnitId(agentId) {
-    try {
-      const response = await fetch(`https://api.mypurecloud.ie/api/v2/workforcemanagement/agents/${agentId}/managementunit`, {
-        headers: {
-          "Authorization": `Bearer ${accessToken}`,
-          "Content-Type": "application/json"
-        }
-      });
-      if (!response.ok) {
-        throw new Error(`Error fetching agent MU: HTTP ${response.status}`);
+  /**********************************************************
+   * 5) GET A USER'S MANAGEMENT UNIT ID
+   **********************************************************/
+  async function getAgentManagementUnitId(token, userId) {
+    const resp = await fetch(`https://api.${region}/api/v2/workforcemanagement/agents/${userId}/managementunit`, {
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json"
       }
-      const data = await response.json();
-      // returns something like: { managementUnit: { id: "..." } }
-      return data.managementUnit?.id || null;
-    } catch (err) {
-      console.error(err);
-      return null;
+    });
+    if (!resp.ok) {
+      throw new Error(`MU ID request failed: HTTP ${resp.status}`);
     }
+    const data = await resp.json();
+    // Typically data: { managementUnit: { id: "12345" } }
+    return data.managementUnit?.id || null;
   }
 
-  // 4) Fetch the Management Unit name from ID
-  async function getManagementUnitNameById(managementUnitId) {
-    try {
-      // For demonstration, fetch ALL MUs and find the matching ID
-      const response = await fetch("https://api.mypurecloud.ie/api/v2/workforcemanagement/managementunits?expand=businessUnit", {
-        headers: {
-          "Authorization": `Bearer ${accessToken}`,
-          "Content-Type": "application/json"
-        }
-      });
-      if (!response.ok) {
-        throw new Error(`Error fetching MUs: HTTP ${response.status}`);
+  /**********************************************************
+   * 6) GET MANAGEMENT UNIT NAME FROM ID
+   **********************************************************/
+  async function getManagementUnitName(token, muId) {
+    // We'll fetch all MUs, then find the one matching muId
+    // For large orgs, you may prefer calling GET /managementunits/{muId} directly
+    const resp = await fetch(`https://api.${region}/api/v2/workforcemanagement/managementunits?expand=businessUnit`, {
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json"
       }
-      const data = await response.json();
-      const muList = data.entities || [];
-      const mu = muList.find(mu => mu.id === managementUnitId);
-      return mu ? mu.name : "(Not Found)";
-    } catch (err) {
-      console.error(err);
-      return "(Error)";
+    });
+    if (!resp.ok) {
+      throw new Error(`ManagementUnits request failed: HTTP ${resp.status}`);
     }
+    const data = await resp.json();
+    const muArray = data.entities || [];
+    const mu = muArray.find(item => item.id === muId);
+    return mu ? mu.name : "(Not Found)";
   }
-
-  // Handle button click to get MU
-  async function onGetManagementUnitClick() {
-    const resultsDiv = document.getElementById("results");
-    const agentsSelect = document.getElementById("agentsSelect");
-
-    resultsDiv.textContent = "Retrieving Management Unit...";
-    const selectedAgentId = agentsSelect.value;
-    if (!selectedAgentId) {
-      alert("No agent selected.");
-      return;
-    }
-
-    const muId = await getAgentManagementUnitId(selectedAgentId);
-    if (!muId) {
-      resultsDiv.textContent = "No assigned Management Unit.";
-      return;
-    }
-
-    const muName = await getManagementUnitNameById(muId);
-    resultsDiv.textContent = `Management Unit for this agent: ${muName}`;
-  }
-
-  // Set up
-  document.addEventListener("DOMContentLoaded", () => {
-    // Kick off the Implicit Grant login
-    initGenesysCloud();
-
-    // Wire up the button
-    document.getElementById("submitBtn").addEventListener("click", onGetManagementUnitClick);
-  });
 </script>
+
 </body>
 </html>
