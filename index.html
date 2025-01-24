@@ -2,12 +2,21 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Genesys Cloud - MU Lookup with Search</title>
+  <title>Genesys Cloud - MU Lookup with Logo & Search</title>
   <style>
     body {
-      font-family: Arial, sans-serif;
+      font-family: Atos, sans-serif;
       margin: 20px;
     }
+    /* Center the logo at the top */
+    #logo-container {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    #logo {
+      width: 300px; /* Adjust as needed */
+    }
+
     label, select, input, button {
       display: block;
       margin: 10px 0;
@@ -20,214 +29,223 @@
 </head>
 <body>
 
-<h1>Genesys Cloud Management Unit Lookup</h1>
+  <!-- Logo Container -->
+  <div id="logo-container">
+    <!-- Replace the URL below if you rename or move your logo -->
+    <img
+      id="logo"
+      src="https://raw.githubusercontent.com/gmcglynn88/Management-Unit-Search/main/Consultinglogo%20(2).png"
+      alt="Company Logo"
+    >
+  </div>
 
-<!-- A textbox to filter users -->
-<label for="searchUser">Search users:</label>
-<input type="text" id="searchUser" placeholder="Type to filter users...">
+  <h1>Genesys Cloud Management Unit Lookup</h1>
 
-<!-- The dropdown of filtered results -->
-<label for="agentSelect">Select an Agent:</label>
-<select id="agentSelect"></select>
+  <!-- A textbox to filter users -->
+  <label for="searchUser">Search users:</label>
+  <input type="text" id="searchUser" placeholder="Type to filter users...">
 
-<button id="lookupBtn">Get Management Unit</button>
+  <!-- The dropdown of filtered results -->
+  <label for="agentSelect">Select an Agent:</label>
+  <select id="agentSelect"></select>
 
-<div id="results"></div>
+  <button id="lookupBtn">Get Management Unit</button>
 
-<script>
-  /**************************************************************************
-   * 1. CONFIG: Put your Genesys Cloud OAuth details and region here
-   **************************************************************************/
-  const clientId      = "YOUR_CLIENT_ID";
-  const redirectUri   = "YOUR_REDIRECT_URI";  // Must match exactly in OAuth config
-  const responseType  = "token";
-  const region        = "mypurecloud.ie"; // e.g., "mypurecloud.ie" for Ireland (Dublin)
+  <div id="results"></div>
 
-  // Construct the OAuth URL for Implicit Grant
-  const oauthUrl = `https://login.${region}/oauth/authorize`
-                 + `?client_id=${clientId}`
-                 + `&response_type=${responseType}`
-                 + `&redirect_uri=${encodeURIComponent(redirectUri)}`;
+  <script>
+    /**************************************************************************
+     * 1. CONFIG: Put your Genesys Cloud OAuth details and region here
+     **************************************************************************/
+    const clientId      = "YOUR_CLIENT_ID";
+    const redirectUri   = "YOUR_REDIRECT_URI";  // Must match exactly in OAuth config
+    const responseType  = "token";
+    const region        = "mypurecloud.ie"; // e.g., "mypurecloud.ie" for Ireland (Dublin)
 
-  // We'll store the token and allUsers globally
-  let accessToken = null;
-  let allUsers = [];  // This will hold the full user list for searching
+    // Construct the OAuth URL for Implicit Grant
+    const oauthUrl = `https://login.${region}/oauth/authorize`
+                   + `?client_id=${clientId}`
+                   + `&response_type=${responseType}`
+                   + `&redirect_uri=${encodeURIComponent(redirectUri)}`;
 
-  /**************************************************************************
-   * 2. ON PAGE LOAD: Check if we have a token in the URL hash; if not, redirect
-   **************************************************************************/
-  document.addEventListener("DOMContentLoaded", async () => {
-    const token = extractTokenFromUrl();
-    if (!token) {
-      // No token? Redirect to Genesys Cloud login
-      window.location.href = oauthUrl;
-    } else {
-      // We have a token
-      accessToken = token;
-      // Load all users, then set up search
-      await loadAllUsers();
-      initSearchAndDropdown();
-      // Handle button click
-      document.getElementById("lookupBtn").addEventListener("click", onGetManagementUnitClick);
-    }
-  });
+    // We'll store the token and allUsers globally
+    let accessToken = null;
+    let allUsers = [];  // This will hold the full user list for searching
 
-  // Extract the access token from the location hash (#access_token=...)
-  function extractTokenFromUrl() {
-    const hash = window.location.hash.substring(1); // remove '#'
-    const params = new URLSearchParams(hash);
-    return params.get("access_token");
-  }
-
-  /**************************************************************************
-   * 3. LOAD ALL USERS (Paged) AND STORE IN `allUsers`
-   **************************************************************************/
-  async function loadAllUsers() {
-    try {
-      let pageNumber = 1;
-      let morePages = true;
-      allUsers = [];  // clear global array
-
-      while (morePages) {
-        const url = `https://api.${region}/api/v2/users?pageNumber=${pageNumber}&pageSize=100`;
-        const resp = await fetch(url, {
-          headers: {
-            "Authorization": `Bearer ${accessToken}`,
-            "Content-Type": "application/json"
-          }
-        });
-        if (!resp.ok) {
-          throw new Error(`Failed to fetch users (page ${pageNumber}): ${resp.status}`);
-        }
-        const data = await resp.json();
-        if (data.entities) {
-          allUsers = allUsers.concat(data.entities);
-        }
-
-        // If there's another page, increment; else stop
-        if (pageNumber < data.pageCount) {
-          pageNumber++;
-        } else {
-          morePages = false;
-        }
+    /**************************************************************************
+     * 2. ON PAGE LOAD: Check if we have a token in the URL hash; if not, redirect
+     **************************************************************************/
+    document.addEventListener("DOMContentLoaded", async () => {
+      const token = extractTokenFromUrl();
+      if (!token) {
+        // No token? Redirect to Genesys Cloud login
+        window.location.href = oauthUrl;
+      } else {
+        // We have a token
+        accessToken = token;
+        // Load all users, then set up search
+        await loadAllUsers();
+        initSearchAndDropdown();
+        // Handle button click
+        document.getElementById("lookupBtn").addEventListener("click", onGetManagementUnitClick);
       }
-      console.log(`Loaded ${allUsers.length} total users.`);
-    } catch (err) {
-      console.error("Error loading all users:", err);
-      document.getElementById("results").textContent = `Error: ${err.message}`;
-    }
-  }
-
-  /**************************************************************************
-   * 4. SET UP THE SEARCH TEXTBOX & POPULATE INITIAL DROPDOWN
-   **************************************************************************/
-  function initSearchAndDropdown() {
-    // Listen for user typing in #searchUser
-    const searchBox = document.getElementById("searchUser");
-    searchBox.addEventListener("input", () => {
-      filterAndPopulateUsers(searchBox.value);
     });
 
-    // Populate the select for the first time (no filter)
-    filterAndPopulateUsers("");
-  }
-
-  // Filter allUsers by the searchTerm, then populate the <select>
-  function filterAndPopulateUsers(searchTerm) {
-    const agentSelect = document.getElementById("agentSelect");
-    agentSelect.innerHTML = "";
-
-    // Basic case-insensitive match on user name or username
-    const lowerSearch = searchTerm.toLowerCase();
-    const filtered = allUsers.filter(u => {
-      const nameMatch = (u.name || "").toLowerCase().includes(lowerSearch);
-      const userNameMatch = (u.username || "").toLowerCase().includes(lowerSearch);
-      return nameMatch || userNameMatch;
-    });
-
-    if (filtered.length === 0) {
-      // No matches?
-      const opt = document.createElement("option");
-      opt.value = "";
-      opt.text = "No users found";
-      agentSelect.add(opt);
-      return;
+    // Extract the access token from the location hash (#access_token=...)
+    function extractTokenFromUrl() {
+      const hash = window.location.hash.substring(1); // remove '#'
+      const params = new URLSearchParams(hash);
+      return params.get("access_token");
     }
 
-    // Populate the dropdown with the filtered list
-    filtered.forEach(u => {
-      const opt = document.createElement("option");
-      opt.value = u.id;
-      opt.text = u.name || u.username || u.id;
-      agentSelect.add(opt);
-    });
-  }
+    /**************************************************************************
+     * 3. LOAD ALL USERS (Paged) AND STORE IN `allUsers`
+     **************************************************************************/
+    async function loadAllUsers() {
+      try {
+        let pageNumber = 1;
+        let morePages = true;
+        allUsers = [];  // clear global array
 
-  /**************************************************************************
-   * 5. MANAGEMENT UNIT LOOKUP LOGIC
-   **************************************************************************/
-  async function onGetManagementUnitClick() {
-    const agentSelect = document.getElementById("agentSelect");
-    const selectedAgentId = agentSelect.value;
-    const resultsDiv = document.getElementById("results");
+        while (morePages) {
+          const url = `https://api.${region}/api/v2/users?pageNumber=${pageNumber}&pageSize=100`;
+          const resp = await fetch(url, {
+            headers: {
+              "Authorization": `Bearer ${accessToken}`,
+              "Content-Type": "application/json"
+            }
+          });
+          if (!resp.ok) {
+            throw new Error(`Failed to fetch users (page ${pageNumber}): ${resp.status}`);
+          }
+          const data = await resp.json();
+          if (data.entities) {
+            allUsers = allUsers.concat(data.entities);
+          }
 
-    if (!selectedAgentId) {
-      resultsDiv.textContent = "Please select an agent.";
-      return;
+          // If there's another page, increment; else stop
+          if (pageNumber < data.pageCount) {
+            pageNumber++;
+          } else {
+            morePages = false;
+          }
+        }
+        console.log(`Loaded ${allUsers.length} total users.`);
+      } catch (err) {
+        console.error("Error loading all users:", err);
+        document.getElementById("results").textContent = `Error: ${err.message}`;
+      }
     }
 
-    resultsDiv.textContent = "Looking up Management Unit...";
+    /**************************************************************************
+     * 4. SET UP THE SEARCH TEXTBOX & POPULATE INITIAL DROPDOWN
+     **************************************************************************/
+    function initSearchAndDropdown() {
+      // Listen for user typing in #searchUser
+      const searchBox = document.getElementById("searchUser");
+      searchBox.addEventListener("input", () => {
+        filterAndPopulateUsers(searchBox.value);
+      });
 
-    try {
-      const muId = await getAgentManagementUnitId(selectedAgentId);
-      if (!muId) {
-        resultsDiv.textContent = "No Management Unit found for this user.";
+      // Populate the select for the first time (no filter)
+      filterAndPopulateUsers("");
+    }
+
+    // Filter allUsers by the searchTerm, then populate the <select>
+    function filterAndPopulateUsers(searchTerm) {
+      const agentSelect = document.getElementById("agentSelect");
+      agentSelect.innerHTML = "";
+
+      const lowerSearch = searchTerm.toLowerCase();
+      const filtered = allUsers.filter(u => {
+        const nameMatch = (u.name || "").toLowerCase().includes(lowerSearch);
+        const userNameMatch = (u.username || "").toLowerCase().includes(lowerSearch);
+        return nameMatch || userNameMatch;
+      });
+
+      if (filtered.length === 0) {
+        // No matches?
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.text = "No users found";
+        agentSelect.add(opt);
         return;
       }
-      const muName = await getManagementUnitName(muId);
-      resultsDiv.textContent = `Management Unit: ${muName}`;
-    } catch (err) {
-      console.error("MU lookup error:", err);
-      resultsDiv.textContent = "Error: " + err.message;
-    }
-  }
 
-  // Fetch the agent's managementUnit ID
-  async function getAgentManagementUnitId(userId) {
-    const url = `https://api.${region}/api/v2/workforcemanagement/agents/${userId}/managementunit`;
-    const resp = await fetch(url, {
-      headers: {
-        "Authorization": `Bearer ${accessToken}`,
-        "Content-Type": "application/json"
-      }
-    });
-    if (!resp.ok) {
-      throw new Error(`MU ID fetch failed: HTTP ${resp.status}`);
+      // Populate the dropdown with the filtered list
+      filtered.forEach(u => {
+        const opt = document.createElement("option");
+        opt.value = u.id;
+        opt.text = u.name || u.username || u.id;
+        agentSelect.add(opt);
+      });
     }
-    const data = await resp.json();
-    return data.managementUnit?.id || null;
-  }
 
-  // Fetch all MUs, find the one matching muId, return its name
-  async function getManagementUnitName(muId) {
-    const url = `https://api.${region}/api/v2/workforcemanagement/managementunits?expand=businessUnit`;
-    const resp = await fetch(url, {
-      headers: {
-        "Authorization": `Bearer ${accessToken}`,
-        "Content-Type": "application/json"
+    /**************************************************************************
+     * 5. MANAGEMENT UNIT LOOKUP LOGIC
+     **************************************************************************/
+    async function onGetManagementUnitClick() {
+      const agentSelect = document.getElementById("agentSelect");
+      const selectedAgentId = agentSelect.value;
+      const resultsDiv = document.getElementById("results");
+
+      if (!selectedAgentId) {
+        resultsDiv.textContent = "Please select an agent.";
+        return;
       }
-    });
-    if (!resp.ok) {
-      throw new Error(`ManagementUnits fetch failed: HTTP ${resp.status}`);
+
+      resultsDiv.textContent = "Looking up Management Unit...";
+
+      try {
+        const muId = await getAgentManagementUnitId(selectedAgentId);
+        if (!muId) {
+          resultsDiv.textContent = "No Management Unit found for this user.";
+          return;
+        }
+        const muName = await getManagementUnitName(muId);
+        resultsDiv.textContent = `Management Unit: ${muName}`;
+      } catch (err) {
+        console.error("MU lookup error:", err);
+        resultsDiv.textContent = "Error: " + err.message;
+      }
     }
-    const data = await resp.json();
-    const muArray = data.entities || [];
-    const muObj = muArray.find(mu => mu.id === muId);
-    if (!muObj) {
-      return "No Management Unit found";
+
+    // Fetch the agent's managementUnit ID
+    async function getAgentManagementUnitId(userId) {
+      const url = `https://api.${region}/api/v2/workforcemanagement/agents/${userId}/managementunit`;
+      const resp = await fetch(url, {
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+          "Content-Type": "application/json"
+        }
+      });
+      if (!resp.ok) {
+        throw new Error(`MU ID fetch failed: HTTP ${resp.status}`);
+      }
+      const data = await resp.json();
+      return data.managementUnit?.id || null;
     }
-    return muObj.name || "Unnamed Management Unit";
-  }
-</script>
+
+    // Fetch all MUs, find the one matching muId, return its name
+    async function getManagementUnitName(muId) {
+      const url = `https://api.${region}/api/v2/workforcemanagement/managementunits?expand=businessUnit`;
+      const resp = await fetch(url, {
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+          "Content-Type": "application/json"
+        }
+      });
+      if (!resp.ok) {
+        throw new Error(`ManagementUnits fetch failed: HTTP ${resp.status}`);
+      }
+      const data = await resp.json();
+      const muArray = data.entities || [];
+      const muObj = muArray.find(mu => mu.id === muId);
+      if (!muObj) {
+        return "No Management Unit found";
+      }
+      return muObj.name || "Unnamed Management Unit";
+    }
+  </script>
 </body>
 </html>
