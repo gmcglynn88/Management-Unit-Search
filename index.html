@@ -1,215 +1,125 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8" />
-  <title>Genesys Cloud Management Unit Lookup</title>
+  <meta charset="UTF-8">
+  <title>Genesys Cloud Client Credentials Test</title>
   <style>
-    /* Optional styling */
     body {
       font-family: Arial, sans-serif;
       margin: 20px;
     }
-    label, select, button {
-      display: block;
-      margin: 10px 0;
+    button {
+      margin-top: 10px;
+      padding: 8px 16px;
+      font-size: 1em;
     }
     #results {
       margin-top: 20px;
-      font-weight: bold;
     }
   </style>
-
-  <!-- 1) Load the Genesys Cloud JavaScript SDK from the CDN -->
-  <script src="https://sdk-cdn.mypurecloud.com/javascript-platform-client-v72.0.0.min.js"></script>
 </head>
 <body>
 
-  <h1>Genesys Cloud Management Unit Lookup</h1>
+<h1>Genesys Cloud API Test (Client Credentials)</h1>
 
-  <div id="loginStatus">Logging in...</div>
+<p><strong>Warning:</strong> This approach is insecure for production because it exposes your client secret in browser-visible code.</p>
 
-  <!-- Dropdown to select an agent -->
-  <label for="agentsSelect">Select an Agent:</label>
-  <select id="agentsSelect" disabled></select>
+<button id="getTokenBtn">Get Token</button>
+<button id="listUsersBtn" disabled>List Users</button>
 
-  <button id="submitBtn" disabled>Get Management Unit</button>
+<div id="results"></div>
 
-  <div id="results"></div>
+<script>
+  // Replace these with your actual Client Credentials
+  const CLIENT_ID = "5f8da5c2-f8ef-4168-a321-f06e16f558f3";
+  const CLIENT_SECRET = "g3O12FzcJJHiDI4wKnRb-2NSnrasAH3m1q4Zjg2gziE";
 
-  <!-- 2) Your custom script goes AFTER the SDK script so platformClient is defined -->
-  <script>
-    // We'll store our Genesys Cloud API token here once we're logged in
-    let accessToken = null;
+  // Ireland login & API URLs
+  const OAUTH_TOKEN_URL = "https://login.mypurecloud.ie/oauth/token";
+  const API_BASE_URL    = "https://api.mypurecloud.ie";
 
-    // Set your Genesys Cloud region here (Ireland)
-    const GENESYS_CLOUD_ENV = "mypurecloud.ie";
+  let accessToken = null;
 
-    // Your Genesys Cloud OAuth Client details:
-    const CLIENT_ID = "5f8da5c2-f8ef-4168-a321-f06e16f558f3";
-    const REDIRECT_URI = "https://gmcglynn88.github.io/Management-Unit-Search/";
+  // 1) Obtain a token using Client Credentials
+  async function fetchClientCredentialsToken() {
+    // Basic Auth requires base64-encoded "clientId:clientSecret"
+    const base64Auth = btoa(`${CLIENT_ID}:${CLIENT_SECRET}`);
 
-    // The Genesys Cloud Platform Client instance
-    // This must happen AFTER the SDK script is loaded
-    const platformClient = window.platformClient;
-    const client = platformClient.ApiClient.instance;
+    // Body for grant_type=client_credentials
+    const bodyData = new URLSearchParams();
+    bodyData.append("grant_type", "client_credentials");
 
-    // 1) Initialize Genesys Cloud and do Implicit Grant login
-    async function initGenesysCloud() {
-      try {
-        // Set environment (region)
-        client.setEnvironment(GENESYS_CLOUD_ENV);
-
-        // Initiate the Implicit Grant login
-        await client.loginImplicitGrant(CLIENT_ID, REDIRECT_URI);
-
-        // Retrieve the token from the JS SDK
-        accessToken = client.authData.accessToken;
-        console.log("Successfully logged in. Access token:", accessToken);
-
-        document.getElementById("loginStatus").textContent = "Logged in!";
-        document.getElementById("agentsSelect").disabled = false;
-        document.getElementById("submitBtn").disabled = false;
-
-        // Now we can call our function to load the Agents
-        loadAgentsIntoDropdown();
-
-      } catch (error) {
-        console.error("Error logging in to Genesys Cloud:", error);
-        document.getElementById("loginStatus").textContent = "Login failed. See console.";
-      }
-    }
-
-    // 2) Fetch the list of agents and populate the dropdown
-    async function loadAgentsIntoDropdown() {
-      const agentsSelect = document.getElementById("agentsSelect");
-
-      // Show something while loading
-      agentsSelect.innerHTML = "<option>Loading agents...</option>";
-
-      try {
-        const response = await fetch("https://api.mypurecloud.ie/api/v2/users?limit=100", {
-          method: "GET",
-          headers: {
-            "Authorization": `Bearer ${accessToken}`,
-            "Content-Type": "application/json"
-          }
-        });
-
-        if (!response.ok) {
-          throw new Error(`Error fetching users: HTTP ${response.status}`);
-        }
-
-        const data = await response.json();
-        const agents = data.entities || [];
-
-        // Clear the select
-        agentsSelect.innerHTML = "";
-
-        if (agents.length > 0) {
-          agents.forEach(agent => {
-            const option = document.createElement("option");
-            option.value = agent.id;
-            option.text = agent.name || agent.username || "Unknown";
-            agentsSelect.appendChild(option);
-          });
-        } else {
-          const option = document.createElement("option");
-          option.value = "";
-          option.text = "No agents found";
-          agentsSelect.appendChild(option);
-        }
-
-      } catch (error) {
-        console.error(error);
-        alert("Failed to fetch agent list. Check console for more details.");
-        agentsSelect.innerHTML = "<option>No agents</option>";
-      }
-    }
-
-    // 3) Fetch an Agent's Management Unit ID
-    async function getAgentManagementUnitId(agentId) {
-      try {
-        const response = await fetch(`https://api.mypurecloud.ie/api/v2/workforcemanagement/agents/${agentId}/managementunit`, {
-          method: "GET",
-          headers: {
-            "Authorization": `Bearer ${accessToken}`,
-            "Content-Type": "application/json"
-          }
-        });
-
-        if (!response.ok) {
-          throw new Error(`Error fetching agent's MU: HTTP ${response.status}`);
-        }
-
-        const data = await response.json();
-        return data.managementUnit && data.managementUnit.id ? data.managementUnit.id : null;
-      } catch (error) {
-        console.error(error);
-        return null;
-      }
-    }
-
-    // 4) Fetch the Management Unit name by ID
-    async function getManagementUnitNameById(managementUnitId) {
-      try {
-        // Option A: fetch a single MU by ID
-        // const response = await fetch(`https://api.mypurecloud.ie/api/v2/workforcemanagement/managementunits/${managementUnitId}`, { ... });
-
-        // Option B: fetch all MUs (for demonstration)
-        const response = await fetch("https://api.mypurecloud.ie/api/v2/workforcemanagement/managementunits?expand=businessUnit", {
-          method: "GET",
-          headers: {
-            "Authorization": `Bearer ${accessToken}`,
-            "Content-Type": "application/json"
-          }
-        });
-
-        if (!response.ok) {
-          throw new Error(`Error fetching management units: HTTP ${response.status}`);
-        }
-
-        const data = await response.json();
-        const managementUnits = data.entities || [];
-
-        const mu = managementUnits.find(mu => mu.id === managementUnitId);
-        return mu ? mu.name : "(Not Found)";
-      } catch (error) {
-        console.error(error);
-        return "(Unknown)";
-      }
-    }
-
-    // When the user clicks "Get Management Unit"
-    async function onGetManagementUnitClick() {
-      const resultsDiv = document.getElementById("results");
-      const agentsSelect = document.getElementById("agentsSelect");
-
-      resultsDiv.textContent = "Retrieving Management Unit...";
-      const selectedAgentId = agentsSelect.value;
-      if (!selectedAgentId) {
-        alert("No agent selected.");
-        return;
-      }
-
-      const muId = await getAgentManagementUnitId(selectedAgentId);
-      if (!muId) {
-        resultsDiv.textContent = "This user might not have an assigned management unit.";
-        return;
-      }
-
-      const muName = await getManagementUnitNameById(muId);
-      resultsDiv.textContent = `Management Unit for selected Agent: ${muName}`;
-    }
-
-    // 5) Set up event listeners AFTER login is complete
-    document.addEventListener("DOMContentLoaded", () => {
-      // Start the login process as soon as the page loads
-      initGenesysCloud();
-
-      // Wire the button
-      const submitBtn = document.getElementById("submitBtn");
-      submitBtn.addEventListener("click", onGetManagementUnitClick);
+    const response = await fetch(OAUTH_TOKEN_URL, {
+      method: "POST",
+      headers: {
+        "Authorization": `Basic ${base64Auth}`,
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: bodyData.toString()
     });
-  </script>
+
+    if (!response.ok) {
+      throw new Error(`Failed to get token: HTTP ${response.status}`);
+    }
+
+    const tokenData = await response.json();
+    return tokenData.access_token;
+  }
+
+  // 2) Example: List up to 10 users
+  async function listUsers() {
+    if (!accessToken) {
+      alert("No access token. Please get a token first.");
+      return;
+    }
+
+    const response = await fetch(`${API_BASE_URL}/api/v2/users?limit=10`, {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${accessToken}`
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to list users: HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data;
+  }
+
+  // Hook up the buttons
+  document.getElementById("getTokenBtn").addEventListener("click", async () => {
+    const resultsDiv = document.getElementById("results");
+    resultsDiv.textContent = "Requesting token...";
+
+    try {
+      accessToken = await fetchClientCredentialsToken();
+      resultsDiv.textContent = `Got Token: ${accessToken}`;
+      console.log("Access Token:", accessToken);
+
+      document.getElementById("listUsersBtn").disabled = false;
+    } catch (err) {
+      console.error(err);
+      resultsDiv.textContent = `Error: ${err.message}`;
+    }
+  });
+
+  document.getElementById("listUsersBtn").addEventListener("click", async () => {
+    const resultsDiv = document.getElementById("results");
+    resultsDiv.textContent = "Listing users...";
+
+    try {
+      const data = await listUsers();
+      // Just display user names in the results
+      const userList = (data.entities || []).map(u => u.name || u.id).join(", ");
+      resultsDiv.textContent = "Users: " + (userList || "None found");
+    } catch (err) {
+      console.error(err);
+      resultsDiv.textContent = `Error: ${err.message}`;
+    }
+  });
+</script>
+
 </body>
 </html>
