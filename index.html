@@ -31,7 +31,6 @@
 
   <!-- Logo Container -->
   <div id="logo-container">
-    <!-- Replace the URL below if you rename or move your logo -->
     <img
       id="logo"
       src="https://raw.githubusercontent.com/gmcglynn88/Management-Unit-Search/main/Consultinglogo%20(2).png"
@@ -39,13 +38,11 @@
     >
   </div>
 
-  <h1>Which MU did I put you in??</h1>
+  <h1>Which MU did I put you in?</h1>
 
-  <!-- A textbox to filter users -->
   <label for="searchUser">Search users:</label>
   <input type="text" id="searchUser" placeholder="Type to filter users...">
 
-  <!-- The dropdown of filtered results -->
   <label for="agentSelect">Select an Agent:</label>
   <select id="agentSelect"></select>
 
@@ -54,62 +51,38 @@
   <div id="results"></div>
 
   <script>
-    /**************************************************************************
-     * 1. CONFIG: Put your Genesys Cloud OAuth details and region here
-     **************************************************************************/
-    const clientId      = "5f8da5c2-f8ef-4168-a321-f06e16f558f3";
-    const redirectUri   = "https://gmcglynn88.github.io/Management-Unit-Search/";  // Must match exactly in OAuth config
-    const responseType  = "token";
-    const region        = "mypurecloud.ie"; // e.g., "mypurecloud.ie" for Ireland (Dublin)
+    const clientId = "5f8da5c2-f8ef-4168-a321-f06e16f558f3";
+    const redirectUri = "https://gmcglynn88.github.io/Management-Unit-Search/";
+    const responseType = "token";
+    const region = "mypurecloud.ie"; 
 
-    // Construct the OAuth URL for Implicit Grant
-    const oauthUrl = `https://login.${region}/oauth/authorize`
-                   + `?client_id=${clientId}`
-                   + `&response_type=${responseType}`
-                   + `&redirect_uri=${encodeURIComponent(redirectUri)}`;
-
-    // Log the OAuth URL for debugging purposes
-    console.log('Redirecting to OAuth URL:', oauthUrl);
-
-    // We'll store the token and allUsers globally
+    const oauthUrl = `https://login.${region}/oauth/authorize?client_id=${clientId}&response_type=${responseType}&redirect_uri=${encodeURIComponent(redirectUri)}`;
     let accessToken = null;
-    let allUsers = [];  // This will hold the full user list for searching
+    let allUsers = [];
 
-    /**************************************************************************
-     * 2. ON PAGE LOAD: Check if we have a token in the URL hash; if not, redirect
-     **************************************************************************/
     document.addEventListener("DOMContentLoaded", async () => {
       const token = extractTokenFromUrl();
       if (!token) {
-        // No token? Redirect to Genesys Cloud login
         window.location.href = oauthUrl;
       } else {
-        // We have a token
         accessToken = token;
-        // Load all users, then set up search
         await loadAllUsers();
         initSearchAndDropdown();
-        // Handle button click
         document.getElementById("lookupBtn").addEventListener("click", onGetManagementUnitClick);
       }
     });
 
-    // Extract the access token from the location hash (#access_token=...)
     function extractTokenFromUrl() {
-      const hash = window.location.hash.substring(1); // remove '#'
+      const hash = window.location.hash.substring(1);
       const params = new URLSearchParams(hash);
       return params.get("access_token");
     }
 
-    /**************************************************************************
-     * 3. LOAD ALL USERS (Paged) AND STORE IN `allUsers`
-     **************************************************************************/
     async function loadAllUsers() {
       try {
         let pageNumber = 1;
         let morePages = true;
-        allUsers = [];  // clear global array
-
+        allUsers = [];
         while (morePages) {
           const url = `https://api.${region}/api/v2/users?pageNumber=${pageNumber}&pageSize=100&expand=teams`;
           const resp = await fetch(url, {
@@ -125,8 +98,6 @@
           if (data.entities) {
             allUsers = allUsers.concat(data.entities);
           }
-
-          // If there's another page, increment; else stop
           if (pageNumber < data.pageCount) {
             pageNumber++;
           } else {
@@ -140,25 +111,17 @@
       }
     }
 
-    /**************************************************************************
-     * 4. SET UP THE SEARCH TEXTBOX & POPULATE INITIAL DROPDOWN
-     **************************************************************************/
     function initSearchAndDropdown() {
-      // Listen for user typing in #searchUser
       const searchBox = document.getElementById("searchUser");
       searchBox.addEventListener("input", () => {
         filterAndPopulateUsers(searchBox.value);
       });
-
-      // Populate the select for the first time (no filter)
       filterAndPopulateUsers("");
     }
 
-    // Filter allUsers by the searchTerm, then populate the <select>
     function filterAndPopulateUsers(searchTerm) {
       const agentSelect = document.getElementById("agentSelect");
       agentSelect.innerHTML = "";
-
       const lowerSearch = searchTerm.toLowerCase();
       const filtered = allUsers.filter(u => {
         const nameMatch = (u.name || "").toLowerCase().includes(lowerSearch);
@@ -167,7 +130,6 @@
       });
 
       if (filtered.length === 0) {
-        // No matches?
         const opt = document.createElement("option");
         opt.value = "";
         opt.text = "No users found";
@@ -175,7 +137,6 @@
         return;
       }
 
-      // Populate the dropdown with the filtered list
       filtered.forEach(u => {
         const opt = document.createElement("option");
         opt.value = u.id;
@@ -184,9 +145,6 @@
       });
     }
 
-    /**************************************************************************
-     * 5. MANAGEMENT UNIT AND TEAM LOOKUP LOGIC
-     **************************************************************************/
     async function onGetManagementUnitClick() {
       const agentSelect = document.getElementById("agentSelect");
       const selectedAgentId = agentSelect.value;
@@ -202,13 +160,10 @@
       try {
         const user = allUsers.find(u => u.id === selectedAgentId);
 
-        // Log user data to check if teams are included
-        console.log('Selected user data:', user);
-
         const muId = await getAgentManagementUnitId(selectedAgentId);
         const muName = muId ? await getManagementUnitName(muId) : "No Management Unit found";
         
-        // Check if team exists and update accordingly
+        // Access the team name and check for its existence
         const teamName = user.team && user.team.name ? user.team.name : "No teams assigned";
 
         resultsDiv.innerHTML = `Management Unit: ${muName}<br>Team: ${teamName}`;
@@ -218,7 +173,6 @@
       }
     }
 
-    // Fetch the agent's managementUnit ID
     async function getAgentManagementUnitId(userId) {
       const url = `https://api.${region}/api/v2/workforcemanagement/agents/${userId}/managementunit`;
       const resp = await fetch(url, {
@@ -234,7 +188,6 @@
       return data.managementUnit?.id || null;
     }
 
-    // Fetch all MUs, find the one matching muId, return its name
     async function getManagementUnitName(muId) {
       const url = `https://api.${region}/api/v2/workforcemanagement/managementunits?expand=businessUnit`;
       const resp = await fetch(url, {
