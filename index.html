@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title> Management Unit Finder with Logo & Search</title>
+  <title>Genesys Cloud - MU Lookup with Logo & Search</title>
   <style>
     body {
-      font-family: Aptos, sans-serif;
+      font-family: Atos, sans-serif;
       margin: 20px;
     }
     /* Center the logo at the top */
@@ -111,7 +111,7 @@
         allUsers = [];  // clear global array
 
         while (morePages) {
-          const url = `https://api.${region}/api/v2/users?pageNumber=${pageNumber}&pageSize=100`;
+          const url = `https://api.${region}/api/v2/users?pageNumber=${pageNumber}&pageSize=100&expand=teams`;
           const resp = await fetch(url, {
             headers: {
               "Authorization": `Bearer ${accessToken}`,
@@ -185,7 +185,7 @@
     }
 
     /**************************************************************************
-     * 5. MANAGEMENT UNIT LOOKUP LOGIC
+     * 5. MANAGEMENT UNIT AND TEAM LOOKUP LOGIC
      **************************************************************************/
     async function onGetManagementUnitClick() {
       const agentSelect = document.getElementById("agentSelect");
@@ -197,18 +197,17 @@
         return;
       }
 
-      resultsDiv.textContent = "Looking up Management Unit...";
+      resultsDiv.textContent = "Looking up Management Unit and Team...";
 
       try {
+        const user = allUsers.find(u => u.id === selectedAgentId);
         const muId = await getAgentManagementUnitId(selectedAgentId);
-        if (!muId) {
-          resultsDiv.textContent = "No Management Unit found for this user.";
-          return;
-        }
-        const muName = await getManagementUnitName(muId);
-        resultsDiv.textContent = `Management Unit: ${muName}`;
+        const muName = muId ? await getManagementUnitName(muId) : "No Management Unit found";
+        const teamNames = user.teams.map(team => team.name).join(", ") || "No teams assigned";
+
+        resultsDiv.textContent = `Management Unit: ${muName}\nTeams: ${teamNames}`;
       } catch (err) {
-        console.error("MU lookup error:", err);
+        console.error("MU and Team lookup error:", err);
         resultsDiv.textContent = "Error: " + err.message;
       }
     }
