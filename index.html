@@ -68,6 +68,9 @@
                    + `&response_type=${responseType}`
                    + `&redirect_uri=${encodeURIComponent(redirectUri)}`;
 
+    // Log the OAuth URL for debugging purposes
+    console.log('Redirecting to OAuth URL:', oauthUrl);
+
     // We'll store the token and allUsers globally
     let accessToken = null;
     let allUsers = [];  // This will hold the full user list for searching
