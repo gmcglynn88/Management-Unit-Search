@@ -29,7 +29,6 @@
 </head>
 <body>
 
-  <!-- Logo Container -->
   <div id="logo-container">
     <img
       id="logo"
@@ -84,7 +83,7 @@
         let morePages = true;
         allUsers = [];
         while (morePages) {
-          const url = `https://api.${region}/api/v2/users?pageNumber=${pageNumber}&pageSize=100&expand=teams`;
+          const url = `https://api.${region}/api/v2/users?pageNumber=${pageNumber}&pageSize=100`;
           const resp = await fetch(url, {
             headers: {
               "Authorization": `Bearer ${accessToken}`,
@@ -160,22 +159,40 @@
       try {
         const user = allUsers.find(u => u.id === selectedAgentId);
 
-        // Log user data to check if teams are included
-        console.log('Selected user data:', user);
-
         const muId = await getAgentManagementUnitId(selectedAgentId);
         const muName = muId ? await getManagementUnitName(muId) : "No Management Unit found";
-        
-        // Access the team and check for its existence
-        const teamName = user.team && user.team.name ? user.team.name : "No teams assigned";
-        
-        // Log the team to make sure it is being accessed correctly
-        console.log('Team name:', teamName);
+
+        // Fetch team data explicitly
+        const teamName = await getUserTeam(selectedAgentId);
 
         resultsDiv.innerHTML = `Management Unit: ${muName}<br>Team: ${teamName}`;
       } catch (err) {
         console.error("MU and Team lookup error:", err);
         resultsDiv.textContent = "Error: " + err.message;
+      }
+    }
+
+    async function getUserTeam(userId) {
+      try {
+        const url = `https://api.${region}/api/v2/users/${userId}/teams`;
+        const resp = await fetch(url, {
+          headers: {
+            "Authorization": `Bearer ${accessToken}`,
+            "Content-Type": "application/json"
+          }
+        });
+        if (!resp.ok) {
+          throw new Error(`Team fetch failed: HTTP ${resp.status}`);
+        }
+        const data = await resp.json();
+        if (data.entities && data.entities.length > 0) {
+          return data.entities[0].name; // Get the first team name
+        } else {
+          return "No teams assigned";
+        }
+      } catch (err) {
+        console.error("Error fetching team:", err);
+        return "No teams assigned";
       }
     }
 
