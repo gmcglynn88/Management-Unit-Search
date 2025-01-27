@@ -154,7 +154,7 @@
         return;
       }
 
-      resultsDiv.textContent = "Looking up Management Unit and Team...";
+      resultsDiv.textContent = "Looking up Management Unit, Team, and Manager...";
 
       try {
         const user = allUsers.find(u => u.id === selectedAgentId);
@@ -165,9 +165,15 @@
         // Fetch team data explicitly
         const teamName = await getUserTeam(selectedAgentId);
 
-        resultsDiv.innerHTML = `Management Unit: ${muName}<br>Team: ${teamName}`;
+        // Get manager information by manager ID
+        const managerName = user.manager ? await getManagerName(user.manager.id) : "No manager assigned";
+        
+        // Log the manager info
+        console.log('Manager info:', managerName);
+
+        resultsDiv.innerHTML = `Management Unit: ${muName}<br>Team: ${teamName}<br>Manager: ${managerName}`;
       } catch (err) {
-        console.error("MU and Team lookup error:", err);
+        console.error("MU, Team, or Manager lookup error:", err);
         resultsDiv.textContent = "Error: " + err.message;
       }
     }
@@ -193,6 +199,26 @@
       } catch (err) {
         console.error("Error fetching team:", err);
         return "No teams assigned";
+      }
+    }
+
+    async function getManagerName(managerId) {
+      try {
+        const url = `https://api.${region}/api/v2/users/${managerId}`;
+        const resp = await fetch(url, {
+          headers: {
+            "Authorization": `Bearer ${accessToken}`,
+            "Content-Type": "application/json"
+          }
+        });
+        if (!resp.ok) {
+          throw new Error(`Manager fetch failed: HTTP ${resp.status}`);
+        }
+        const data = await resp.json();
+        return data.name || "Manager not found"; // Get manager's name
+      } catch (err) {
+        console.error("Error fetching manager:", err);
+        return "Manager not found";
       }
     }
 
