@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Which MU did I put you in?</title>
+  <title>Which MU did I put you in??</title>
   <style>
     body {
       font-family: Aptos, sans-serif;
@@ -37,7 +37,7 @@
     >
   </div>
 
-  <h1>Which MU did I put you in?</h1>
+  <h1>Which MU did I put you in??</h1>
 
   <label for="searchUser">Search users:</label>
   <input type="text" id="searchUser" placeholder="Type to filter users...">
@@ -154,7 +154,7 @@
         return;
       }
 
-      resultsDiv.textContent = "Looking up Management Unit, Team, and Manager...";
+      resultsDiv.textContent = "Looking up Management Unit and Manager...";
 
       try {
         const user = allUsers.find(u => u.id === selectedAgentId);
@@ -162,43 +162,16 @@
         const muId = await getAgentManagementUnitId(selectedAgentId);
         const muName = muId ? await getManagementUnitName(muId) : "No Management Unit found";
 
-        // Fetch team data explicitly
-        const teamName = await getUserTeam(selectedAgentId);
-
         // Get manager information by manager ID
         const managerName = user.manager ? await getManagerName(user.manager.id) : "No manager assigned";
         
         // Log the manager info
         console.log('Manager info:', managerName);
 
-        resultsDiv.innerHTML = `Management Unit: ${muName}<br>Team: ${teamName}<br>Manager: ${managerName}`;
+        resultsDiv.innerHTML = `Management Unit: ${muName}<br>Manager: ${managerName}`;
       } catch (err) {
-        console.error("MU, Team, or Manager lookup error:", err);
+        console.error("MU or Manager lookup error:", err);
         resultsDiv.textContent = "Error: " + err.message;
-      }
-    }
-
-    async function getUserTeam(userId) {
-      try {
-        const url = `https://api.${region}/api/v2/users/${userId}/teams`;
-        const resp = await fetch(url, {
-          headers: {
-            "Authorization": `Bearer ${accessToken}`,
-            "Content-Type": "application/json"
-          }
-        });
-        if (!resp.ok) {
-          throw new Error(`Team fetch failed: HTTP ${resp.status}`);
-        }
-        const data = await resp.json();
-        if (data.entities && data.entities.length > 0) {
-          return data.entities[0].name; // Get the first team name
-        } else {
-          return "No teams assigned";
-        }
-      } catch (err) {
-        console.error("Error fetching team:", err);
-        return "No teams assigned";
       }
     }
 
