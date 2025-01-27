@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Genesys Cloud - MU Lookup with Logo & Search</title>
+  <title>MU Looky-uppy with Logo & Search</title>
   <style>
     body {
-      font-family: Atos, sans-serif;
+      font-family: Aptos, sans-serif;
       margin: 20px;
     }
     /* Center the logo at the top */
@@ -201,9 +201,13 @@
 
       try {
         const user = allUsers.find(u => u.id === selectedAgentId);
+
+        // Log user data to check if teams are included
+        console.log('Selected user data:', user);
+
         const muId = await getAgentManagementUnitId(selectedAgentId);
         const muName = muId ? await getManagementUnitName(muId) : "No Management Unit found";
-        const teamNames = user.teams.map(team => team.name).join(", ") || "No teams assigned";
+        const teamNames = user.teams ? user.teams.map(team => team.name).join(", ") : "No teams assigned";
 
         resultsDiv.textContent = `Management Unit: ${muName}\nTeams: ${teamNames}`;
       } catch (err) {
