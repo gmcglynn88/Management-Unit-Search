@@ -160,11 +160,17 @@
       try {
         const user = allUsers.find(u => u.id === selectedAgentId);
 
+        // Log user data to check if teams are included
+        console.log('Selected user data:', user);
+
         const muId = await getAgentManagementUnitId(selectedAgentId);
         const muName = muId ? await getManagementUnitName(muId) : "No Management Unit found";
         
-        // Access the team name and check for its existence
+        // Access the team and check for its existence
         const teamName = user.team && user.team.name ? user.team.name : "No teams assigned";
+        
+        // Log the team to make sure it is being accessed correctly
+        console.log('Team name:', teamName);
 
         resultsDiv.innerHTML = `Management Unit: ${muName}<br>Team: ${teamName}`;
       } catch (err) {
