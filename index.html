@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>MU Looky-uppy with Logo & Search</title>
+  <title>Which MU did i put you in with Logo & Search</title>
   <style>
     body {
       font-family: Aptos, sans-serif;
@@ -207,9 +207,11 @@
 
         const muId = await getAgentManagementUnitId(selectedAgentId);
         const muName = muId ? await getManagementUnitName(muId) : "No Management Unit found";
-        const teamNames = user.teams ? user.teams.map(team => team.name).join(", ") : "No teams assigned";
+        
+        // Check if team exists and update accordingly
+        const teamName = user.team ? user.team.name : "No teams assigned";
 
-        resultsDiv.textContent = `Management Unit: ${muName}\nTeams: ${teamNames}`;
+        resultsDiv.textContent = `Management Unit: ${muName}\nTeam: ${teamName}`;
       } catch (err) {
         console.error("MU and Team lookup error:", err);
         resultsDiv.textContent = "Error: " + err.message;
