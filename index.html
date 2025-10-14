@@ -1,115 +1,157 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Which MU did I put you in?</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!-- Include the Proxima Nova font -->
-  <link href="https://fonts.googleapis.com/css2?family=Proxima+Nova&display=swap" rel="stylesheet">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <style>
-    body {
-      font-family: 'Proxima Nova', Arial, sans-serif;
-      margin: 20px;
-      padding: 20px;
+    :root{
+      --primary-color:#63AB8F; --secondary-color:#4A8C7D; --border-color:#DEE2E6;
+      --light-bg:#F8F9FA; --card-bg:#FFFFFF; --text-color:#2C3E50; --text-light:#6C757D;
+      --pill:#e9f6f0;
     }
-    /* Center the logo at the top */
-    #logo-container {
-      text-align: center;
-      margin-bottom: 20px;
+    body{
+      font-family:'Aptos','Segoe UI',system-ui,-apple-system,Arial,sans-serif;
+      margin:20px;padding:20px;max-width:1200px;background:var(--light-bg);color:var(--text-color)
     }
-    #logo {
-      width: 300px; /* Adjust as needed */
-    }
+    #logo-container{text-align:center;margin-bottom:20px} #logo{width:300px}
+    h1{margin:0 0 16px}
+    .card{background:var(--card-bg);border:1px solid var(--border-color);border-radius:12px;padding:24px;margin-top:16px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+    label{display:block;font-weight:600;margin-bottom:6px}
+    input,select,button,textarea{padding:10px;border:1px solid var(--border-color);border-radius:6px;background:#fff;font-size:14px}
+    button{background:var(--primary-color);color:#fff;font-weight:600;cursor:pointer;transition:background .2s}
+    button:hover{background:var(--secondary-color)} button:disabled{background:var(--text-light);cursor:not-allowed}
+    .controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;align-items:end}
+    .full-width-btn{width:100%;padding:14px 18px;font-size:16px;margin-top:12px}
+    .muted{color:var(--text-light);font-size:12px}
+    .section-title{margin:0 0 10px;color:var(--secondary-color)}
 
-    h1 {
-      font-size: 24px; /* Match the font size of the second script */
-    }
+    #messageContainer{display:none;margin-top:12px}
+    .error-message{color:#b4231a;background:#fee2e2;border:1px solid #fecaca;padding:10px;border-radius:6px}
+    .success-message{color:#14532d;background:#dcfce7;border:1px solid #bbf7d0;padding:10px;border-radius:6px}
+    .info-message{color:#6b4e16;background:#fff7ed;border:1px solid #ffedd5;padding:10px;border-radius:6px}
 
-    label, select, input, button {
-      display: block;
-      margin: 10px 0;
-    }
-
-    /* Specific styling for labels */
-    label {
-      font-weight: bold; /* Make all labels bold */
-    }
-
-    /* Increase size of input boxes and dropdowns */
-    select, input, button {
-      margin-top: 10px;
-      padding: 12px;  /* Increased padding for larger size */
+    /* Make search input wider */
+    #searchUser {
       width: 100%;
-      max-width: 400px;  /* Adjust max-width for larger fields */
-      font-size: 16px;   /* Increased font size */
-    }
-
-    /* Style for the results */
-    #results {
-      margin-top: 20px;
-    }
-
-    /* Non-bold result text */
-    #results p {
-      font-weight: normal;
+      max-width: 400px;
     }
   </style>
 </head>
 <body>
-
   <div id="logo-container">
-    <img
-      id="logo"
-      src="https://raw.githubusercontent.com/gmcglynn88/Management-Unit-Search/main/Consultinglogo%20(2).png"
-      alt="Company Logo"
-    >
+    <img id="logo" src="https://raw.githubusercontent.com/gmcglynn88/Management-Unit-Search/main/Consultinglogo%20(2).png" alt="Company Logo">
   </div>
 
   <h1>Which MU did I put you in?</h1>
 
-  <label for="searchUser">Search users:</label>
-  <input type="text" id="searchUser" placeholder="Type to filter users...">
+  <div id="authCard" class="card">
+    <div id="auth-message" class="info-message">Authenticating with PureCloud...</div>
+  </div>
 
-  <label for="agentSelect">Select an Agent:</label>
-  <select id="agentSelect"></select>
+  <div id="appContent" style="display:none;">
+    <div id="messageContainer"></div>
 
-  <button id="lookupBtn">Get Management Unit</button>
+    <div class="card">
+      <h2 class="section-title">Agent Management Unit Lookup</h2>
+      <div class="controls">
+        <div>
+          <label for="searchUser">Search users:</label>
+          <input type="text" id="searchUser" placeholder="Type to filter users...">
+        </div>
+        <div>
+          <label for="agentSelect">Select an Agent:</label>
+          <select id="agentSelect"></select>
+        </div>
+      </div>
 
-  <div id="results"></div>
+      <button id="lookupBtn" class="full-width-btn">Get Management Unit</button>
+
+      <div id="results" style="margin-top: 20px;"></div>
+    </div>
+  </div>
 
   <script>
-    const clientId = "5f8da5c2-f8ef-4168-a321-f06e16ff3";
-    const redirectUri = "https://gmcglynn88.github.io/Management-Unit-Search/";
-    const responseType = "token";
-    const region = "mypurecloud.ie"; 
+    // ===== OAuth Config =====
+    const clientId = 'd4529142-7340-4cd8-a9f9-f3a4d25670df';
+    
+    // Use the EXACT URI that's registered in Genesys Cloud
+    const redirectUri = 'https://gmcglynn88.github.io/Management-Unit-Search/';
+    
+    const oauthUrl = `https://login.mypurecloud.ie/oauth/authorize?client_id=${clientId}&response_type=token&redirect_uri=${encodeURIComponent(redirectUri)}`;
 
-    const oauthUrl = `https://login.${region}/oauth/authorize?client_id=${clientId}&response_type=${responseType}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+    // Debug logging
+    console.log('OAuth Configuration:');
+    console.log('- Client ID:', clientId);
+    console.log('- Redirect URI:', redirectUri);
+    console.log('- Encoded Redirect URI:', encodeURIComponent(redirectUri));
+    console.log('- Full OAuth URL:', oauthUrl);
+
     let accessToken = null;
     let allUsers = [];
 
-    document.addEventListener("DOMContentLoaded", async () => {
-      const token = extractTokenFromUrl();
-      if (!token) {
-        window.location.href = oauthUrl;
-      } else {
-        accessToken = token;
-        await loadAllUsers();
-        initSearchAndDropdown();
-        document.getElementById("lookupBtn").addEventListener("click", onGetManagementUnitClick);
+    // ===== Auth bootstrap =====
+    document.addEventListener('DOMContentLoaded', () => {
+      // Parse OAuth error from the URL
+      const hash = window.location.hash.substring(1);
+      const params = new URLSearchParams(hash);
+      const qparams = new URLSearchParams(window.location.search);
 
-        // Enable 'Enter' key to trigger the search as well
-        document.getElementById("searchUser").addEventListener("keypress", function(event) {
-          if (event.key === "Enter") {
-            onGetManagementUnitClick();
-          }
-        });
+      const oauthError = params.get('error') || qparams.get('error');
+      const oauthErrorDesc = params.get('error_description') || qparams.get('error_description');
+
+      if (oauthError) {
+        document.getElementById('auth-message').textContent = `OAuth error: ${oauthErrorDesc || oauthError}`;
+        document.getElementById('auth-message').className = 'error-message';
+        console.error('OAuth error details:', { error: oauthError, description: oauthErrorDesc });
+        return;
+      }
+
+      accessToken = params.get('access_token');
+
+      if (accessToken) {
+        sessionStorage.setItem('purecloud_token', accessToken);
+        // Clean URL after successful auth
+        window.location.hash = '';
+        initializeApplication();
+      } else if (sessionStorage.getItem('purecloud_token')) {
+        accessToken = sessionStorage.getItem('purecloud_token');
+        initializeApplication();
+      } else {
+        console.log('Initiating OAuth flow with:', { clientId, redirectUri });
+        window.location.href = oauthUrl;
       }
     });
 
-    function extractTokenFromUrl() {
-      const hash = window.location.hash.substring(1);
-      const params = new URLSearchParams(hash);
-      return params.get("access_token");
+    function showMessage(msg, type='error'){
+      const box = document.getElementById('messageContainer');
+      box.innerHTML = `<div class="${type}-message">${msg}</div>`;
+      box.style.display = 'block';
+      if (type === 'success') setTimeout(()=> box.style.display='none', 5000);
+    }
+
+    function initializeApplication() {
+      document.getElementById('auth-message').textContent = 'Authenticated successfully!';
+      document.getElementById('auth-message').className = 'success-message';
+      setTimeout(() => { 
+        document.getElementById('authCard').style.display = 'none'; 
+      }, 2000);
+
+      document.getElementById('appContent').style.display = 'block';
+      initializeManagementUnitSearch();
+    }
+
+    async function initializeManagementUnitSearch() {
+      await loadAllUsers();
+      initSearchAndDropdown();
+      document.getElementById("lookupBtn").addEventListener("click", onGetManagementUnitClick);
+
+      // Enable 'Enter' key to trigger the search as well
+      document.getElementById("searchUser").addEventListener("keypress", function(event) {
+        if (event.key === "Enter") {
+          onGetManagementUnitClick();
+        }
+      });
     }
 
     async function loadAllUsers() {
@@ -118,7 +160,7 @@
         let morePages = true;
         allUsers = [];
         while (morePages) {
-          const url = `https://api.${region}/api/v2/users?pageNumber=${pageNumber}&pageSize=100`;
+          const url = `https://api.mypurecloud.ie/api/v2/users?pageNumber=${pageNumber}&pageSize=100`;
           const resp = await fetch(url, {
             headers: {
               "Authorization": `Bearer ${accessToken}`,
@@ -141,7 +183,7 @@
         console.log(`Loaded ${allUsers.length} total users.`);
       } catch (err) {
         console.error("Error loading all users:", err);
-        document.getElementById("results").textContent = `Error: ${err.message}`;
+        showMessage(`Error loading users: ${err.message}`, 'error');
       }
     }
 
@@ -185,11 +227,11 @@
       const resultsDiv = document.getElementById("results");
 
       if (!selectedAgentId) {
-        resultsDiv.textContent = "Please select an agent.";
+        resultsDiv.innerHTML = '<div class="error-message">Please select an agent.</div>';
         return;
       }
 
-      resultsDiv.textContent = "Looking up Management Unit and Manager...";
+      resultsDiv.innerHTML = '<div class="info-message">Looking up Management Unit and Manager...</div>';
 
       try {
         const user = allUsers.find(u => u.id === selectedAgentId);
@@ -204,16 +246,19 @@
         console.log('Manager info:', managerName);
 
         // Display results with specific formatting
-        resultsDiv.innerHTML = `<p><strong>Management Unit:</strong> ${muName}</p><p><strong>Manager:</strong> ${managerName}</p>`;
+        resultsDiv.innerHTML = `<div class="success-message">
+          <p><strong>Management Unit:</strong> ${muName}</p>
+          <p><strong>Manager:</strong> ${managerName}</p>
+        </div>`;
       } catch (err) {
         console.error("MU or Manager lookup error:", err);
-        resultsDiv.textContent = "Error: " + err.message;
+        resultsDiv.innerHTML = `<div class="error-message">Error: ${err.message}</div>`;
       }
     }
 
     async function getManagerName(managerId) {
       try {
-        const url = `https://api.${region}/api/v2/users/${managerId}`;
+        const url = `https://api.mypurecloud.ie/api/v2/users/${managerId}`;
         const resp = await fetch(url, {
           headers: {
             "Authorization": `Bearer ${accessToken}`,
@@ -232,7 +277,7 @@
     }
 
     async function getAgentManagementUnitId(userId) {
-      const url = `https://api.${region}/api/v2/workforcemanagement/agents/${userId}/managementunit`;
+      const url = `https://api.mypurecloud.ie/api/v2/workforcemanagement/agents/${userId}/managementunit`;
       const resp = await fetch(url, {
         headers: {
           "Authorization": `Bearer ${accessToken}`,
@@ -247,7 +292,7 @@
     }
 
     async function getManagementUnitName(muId) {
-      const url = `https://api.${region}/api/v2/workforcemanagement/managementunits?expand=businessUnit`;
+      const url = `https://api.mypurecloud.ie/api/v2/workforcemanagement/managementunits?expand=businessUnit`;
       const resp = await fetch(url, {
         headers: {
           "Authorization": `Bearer ${accessToken}`,
